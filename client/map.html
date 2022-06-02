@@ -1,163 +1,185 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-  <meta charset="utf-8">
-  <!-- Include the CesiumJS JavaScript and CSS files -->
-  <script src="https://cesium.com/downloads/cesiumjs/releases/1.93/Build/Cesium/Cesium.js"></script>
-  <link href="https://cesium.com/downloads/cesiumjs/releases/1.93/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
-</head>
-<body>
-  <style>
-    @import url(../client/bucket.css);
-  </style>
-  <div id="cesiumContainer" class="fullSize"></div>
-  <div id="loadingOverlay"><h1>Loading...</h1></div>
-  <div id="toolbar">
-    <div id="terrainMenu"></div>
-    <div id="zoomButtons"></div>
-    <div id="toggleLighting"></div>
-    <div id="sampleButtons"></div>
-  </div>
-  <script>
-    // my token
-    Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIyY2I3M2QxYS0wYjQxLTQ3ZjgtOGIyMy1lNDlhYmEzNzlkNjMiLCJpZCI6OTIyMjUsImlhdCI6MTY1MTY1MzA5Mn0.8q-JwRae-cbDEJZYeBoi3IuoSjR109_hQ2VTkhqrEyI';
+const viewer = new Cesium.Viewer("cesiumContainer", {
+  infoBox: false,
+  selectionIndicator: false,
+  shadows: true,
+  shouldAnimate: true,
+});
 
-    // 전역 3D 건물 및 지형 추가
-    const cesiumTerrainProvider = Cesium.createWorldTerrain();
-    const ellipsoidTerrainProvider = new Cesium.EllipsoidTerrainProvider();
+let entity;
 
-    const viewer = new Cesium.Viewer("cesiumContainer", {
-      baseLayerPicker: false,
-      terrainProvider: cesiumTerrainProvider,
-    });
+function getColorBlendMode(colorBlendMode) {
+  return Cesium.ColorBlendMode[colorBlendMode.toUpperCase()];
+}
 
-    // depth test against terrain is required to make the polygons clamp to terrain
-    // instead of showing through it from underground
-    viewer.scene.globe.depthTestAgainstTerrain = true;
+function getColor(colorName, alpha) {
+  const color = Cesium.Color[colorName.toUpperCase()];
+  return Cesium.Color.fromAlpha(color, parseFloat(alpha));
+}
 
-    Sandcastle.addToolbarMenu([
-      {
-        text: "Polygons",
-        onselect: function () {
-          viewer.entities.removeAll();
-          addPolygons();
-        },
-      },
-      {
-        text: "Boxes, Cylinders and Ellipsoids",
-        onselect: function () {
-          viewer.entities.removeAll();
-          addGeometries();
-        },
-      },
-    ]);
+// The viewModel tracks the state of our mini application.
+const viewModel = {
+  color: "Red",
+  colors: ["White", "Red", "Green", "Blue", "Yellow", "Gray"],
+  alpha: 1.0,
+  colorBlendMode: "Highlight",
+  colorBlendModes: ["Highlight", "Replace", "Mix"],
+  colorBlendAmount: 0.5,
+  colorBlendAmountEnabled: false,
+  silhouetteColor: "Red",
+  silhouetteColors: ["Red", "Green", "Blue", "Yellow", "Gray"],
+  silhouetteAlpha: 1.0,
+  silhouetteSize: 2.0,
+};
 
-    Sandcastle.addToolbarMenu([
-      {
-        text: "Terrain Enabled",
-        onselect: function () {
-          viewer.scene.terrainProvider = cesiumTerrainProvider;
-        },
-      },
-      {
-        text: "Terrain Disabled",
-        onselect: function () {
-          viewer.scene.terrainProvider = ellipsoidTerrainProvider;
-        },
-      },
-    ]);
+// Convert the viewModel members into knockout observables.
+Cesium.knockout.track(viewModel);
 
-    const longitude = 6.950615989890521;
-    const latitude = 45.79546589994886;
-    const delta = 0.001;
+// Bind the viewModel to the DOM elements of the UI that call for it.
+const toolbar = document.getElementById("toolbar");
+Cesium.knockout.applyBindings(viewModel, toolbar);
 
-    function addGeometry(i, j) {
-      const west = longitude + delta * i;
-      const north = latitude + delta * j + delta;
+Cesium.knockout
+  .getObservable(viewModel, "color")
+  .subscribe(function (newValue) {
+    entity.model.color = getColor(newValue, viewModel.alpha);
+  });
 
-      const type = Math.floor(Math.random() * 3);
-      if (type === 0) {
-        viewer.entities.add({
-          position: Cesium.Cartesian3.fromDegrees(west, north, 0.0),
-          box: {
-            dimensions: new Cesium.Cartesian3(40.0, 30.0, 50.0),
-            material: Cesium.Color.fromRandom({ alpha: 1.0 }),
-            heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-          },
-        });
-      } else if (type === 1) {
-        viewer.entities.add({
-          position: Cesium.Cartesian3.fromDegrees(west, north, 0.0),
-          cylinder: {
-            length: 50.0,
-            topRadius: 20.0,
-            bottomRadius: 20.0,
-            material: Cesium.Color.fromRandom({ alpha: 1.0 }),
-            heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-          },
-        });
-      } else {
-        viewer.entities.add({
-          position: Cesium.Cartesian3.fromDegrees(west, north, 0.0),
-          ellipsoid: {
-            radii: new Cesium.Cartesian3(20.0, 15.0, 25.0),
-            material: Cesium.Color.fromRandom({ alpha: 1.0 }),
-            heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-          },
-        });
-      }
-    }
+Cesium.knockout
+  .getObservable(viewModel, "alpha")
+  .subscribe(function (newValue) {
+    entity.model.color = getColor(viewModel.color, newValue);
+  });
 
-    function addGeometries() {
-      for (let i = 0; i < 4; i++) {
-        for (let j = 0; j < 4; j++) {
-          addGeometry(i, j);
-        }
-      }
-      viewer.zoomTo(viewer.entities);
-    }
+Cesium.knockout
+  .getObservable(viewModel, "colorBlendMode")
+  .subscribe(function (newValue) {
+    const colorBlendMode = getColorBlendMode(newValue);
+    entity.model.colorBlendMode = colorBlendMode;
+    viewModel.colorBlendAmountEnabled =
+      colorBlendMode === Cesium.ColorBlendMode.MIX;
+  });
 
-    function addPolygon(i, j) {
-      const west = longitude + delta * i;
-      const east = longitude + delta * i + delta;
+Cesium.knockout
+  .getObservable(viewModel, "colorBlendAmount")
+  .subscribe(function (newValue) {
+    entity.model.colorBlendAmount = parseFloat(newValue);
+  });
 
-      const south = latitude + delta * j;
-      const north = latitude + delta * j + delta;
-      const a = Cesium.Cartesian3.fromDegrees(west, south);
-      const b = Cesium.Cartesian3.fromDegrees(west, north);
-      const c = Cesium.Cartesian3.fromDegrees(east, north);
-      const d = Cesium.Cartesian3.fromDegrees(east, south);
+Cesium.knockout
+  .getObservable(viewModel, "silhouetteColor")
+  .subscribe(function (newValue) {
+    entity.model.silhouetteColor = getColor(
+      newValue,
+      viewModel.silhouetteAlpha
+    );
+  });
 
-      const positions = [a, b, c, d];
-      viewer.entities.add({
-        polygon: {
-          hierarchy: positions,
-          material: Cesium.Color.fromRandom({ alpha: 1 }),
-          height: 40.0,
-          heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
-          extrudedHeight: 0.0,
-          extrudedHeightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-        },
-      });
-    }
+Cesium.knockout
+  .getObservable(viewModel, "silhouetteAlpha")
+  .subscribe(function (newValue) {
+    entity.model.silhouetteColor = getColor(
+      viewModel.silhouetteColor,
+      newValue
+    );
+  });
 
-    function addPolygons() {
-      // create 16 polygons that are side-by-side
-      for (let i = 0; i < 4; i++) {
-        for (let j = 0; j < 4; j++) {
-          addPolygon(i, j);
-        }
-      }
-      viewer.camera.lookAt(
-        Cesium.Cartesian3.fromDegrees(longitude, latitude, 1500),
-        new Cesium.HeadingPitchRange(
-          -Cesium.Math.PI / 2,
-          -Cesium.Math.PI_OVER_FOUR,
-          2000
-        )
+Cesium.knockout
+  .getObservable(viewModel, "silhouetteSize")
+  .subscribe(function (newValue) {
+    entity.model.silhouetteSize = parseFloat(newValue);
+  });
+
+function createModel(url, height) {
+  viewer.entities.removeAll();
+
+  const position = Cesium.Cartesian3.fromDegrees(
+    -123.0744619,
+    44.0503706,
+    height
+  );
+  const heading = Cesium.Math.toRadians(135);
+  const pitch = 0;
+  const roll = 0;
+  const hpr = new Cesium.HeadingPitchRoll(heading, pitch, roll);
+  const orientation = Cesium.Transforms.headingPitchRollQuaternion(
+    position,
+    hpr
+  );
+
+  entity = viewer.entities.add({
+    name: url,
+    position: position,
+    orientation: orientation,
+    model: {
+      uri: url,
+      minimumPixelSize: 128,
+      maximumScale: 20000,
+      color: getColor(viewModel.color, viewModel.alpha),
+      colorBlendMode: getColorBlendMode(viewModel.colorBlendMode),
+      colorBlendAmount: parseFloat(viewModel.colorBlendAmount),
+      silhouetteColor: getColor(
+        viewModel.silhouetteColor,
+        viewModel.silhouetteAlpha
+      ),
+      silhouetteSize: parseFloat(viewModel.silhouetteSize),
+    },
+  });
+  viewer.trackedEntity = entity;
+}
+
+const options = [
+  {
+    text: "Aircraft",
+    onselect: function () {
+      createModel(
+        "../SampleData/models/CesiumAir/Cesium_Air.glb",
+        5000.0
       );
-      viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
-    }
-  </script>
-</body>
-</html>
+    },
+  },
+  {
+    text: "Ground Vehicle",
+    onselect: function () {
+      createModel(
+        "../SampleData/models/GroundVehicle/GroundVehicle.glb",
+        0
+      );
+    },
+  },
+  {
+    text: "Hot Air Balloon",
+    onselect: function () {
+      createModel(
+        "../SampleData/models/CesiumBalloon/CesiumBalloon.glb",
+        1000.0
+      );
+    },
+  },
+  {
+    text: "Milk Truck",
+    onselect: function () {
+      createModel(
+        "../SampleData/models/CesiumMilkTruck/CesiumMilkTruck.glb",
+        0
+      );
+    },
+  },
+  {
+    text: "Skinned Character",
+    onselect: function () {
+      createModel(
+        "../SampleData/models/CesiumMan/Cesium_Man.glb",
+        0
+      );
+    },
+  },
+];
+
+Sandcastle.addToolbarMenu(options);
+
+Sandcastle.addToggleButton("Shadows", viewer.shadows, function (
+  checked
+) {
+  viewer.shadows = checked;
+});
+
